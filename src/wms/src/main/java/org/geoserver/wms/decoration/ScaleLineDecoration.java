@@ -43,12 +43,27 @@ public class ScaleLineDecoration implements MapDecoration {
 	private Unit bottomUnit = null;
 	private Map<String, Unit> units = new HashMap<>();
 
+	private enum Alignment{
+		LEFT,CENTER,RIGHT;
+
+		public static Alignment toEnum(String name){
+			switch(name.toLowerCase()){
+				case "left": return LEFT;
+				case "center": return CENTER;
+				case "right": return RIGHT;
+				default: return null;
+			}
+		}
+	}
+
+	private Alignment currentAlignment = Alignment.LEFT;
+
 	public ScaleLineDecoration() {
 
 		// Set up all systems
 		units.put("metric", new Unit(new UnitType("METER", "m", 39.3701, 100000), new UnitType("KILOMETER", "km", 39370.1, 0)));
 		units.put("imperial", new Unit(new UnitType("FEET", "ft", 12.0, 20000), new UnitType("YARD", "yd", 36.0, 100000), new UnitType("MILE", "mi", 63360.0, 0)));
-		units.put("oldimperial", new Unit(new UnitType("FEET", "ft", 12.0, 20000), new UnitType("MILE", "mi", 63360.0, 0)));
+		units.put("oldimperial", new Unit(new UnitType("FEET", "ft", 12.0, 100000), new UnitType("MILE", "mi", 63360.0, 0)));
 		units.put("nautical", new Unit(new UnitType("NAUTICAL MILE", "nmi", 72913.4, 0)));
 		units.put("decimal", new Unit(new UnitType("DECIMAL DEGREES", "dd", 4374754.0, 0)));
 
@@ -134,6 +149,23 @@ public class ScaleLineDecoration implements MapDecoration {
     		}
     	}
 
+		if (options.get("alignment") != null) {
+			try {
+				LOGGER.log(Level.INFO, options.get("alignment"));
+				String alignment = options.get("alignment");
+
+				Alignment alignmentEnum = Alignment.toEnum(alignment);
+				if(alignmentEnum!=null){
+					currentAlignment = alignmentEnum;
+				}else{
+					throw new Exception("Wrong input parameter, must be one of left, right or center");
+				}
+
+			} catch (Exception e) {
+				LOGGER.log(Level.WARNING, "'scalewidthpercent' must be an integer.", e);
+			}
+		}
+
     	if (options.get("topunit") != null) {
     		try {
     	    	LOGGER.log(Level.INFO, options.get("topunit"));
@@ -187,7 +219,7 @@ public class ScaleLineDecoration implements MapDecoration {
     		barLength = 1;
     	}
 
-    	return (int)(barLength * pow10);
+    	return (int)Math.round((barLength * pow10));
     }
 
     public void paint(Graphics2D g2d, Rectangle paintArea, WMSMapContent mapContent)
@@ -215,8 +247,8 @@ public class ScaleLineDecoration implements MapDecoration {
 
         maxWidth = maxWidth - 6;
 
-    	int topSize = 0;
-    	int bottomSize = 0;
+    	double topSize = 0;
+    	double bottomSize = 0;
     	BufferedImage scaleLineTop = new BufferedImage((int) paintArea.getWidth(), (int) paintArea.getHeight(), BufferedImage.TYPE_INT_ARGB);
     	BufferedImage scaleLineBottom = new BufferedImage((int) paintArea.getWidth(), (int) paintArea.getHeight(), BufferedImage.TYPE_INT_ARGB);
 
@@ -229,9 +261,9 @@ public class ScaleLineDecoration implements MapDecoration {
 
     	int centerY = (int) paintArea.getCenterY();
 
-    	int scaleLineMaxWidth = Math.max(topSize, bottomSize);
+    	int scaleLineMaxWidth = (int)Math.round(Math.max(topSize, bottomSize));
 
-    	int leftX = (int)paintArea.getMinX() + ((int) paintArea.getWidth() - scaleLineMaxWidth) / 2;
+    	int leftX = (int)Math.round(paintArea.getMinX() + ( paintArea.getWidth() - scaleLineMaxWidth) / 2);
 
     	FontMetrics metrics = g2d.getFontMetrics(g2d.getFont());
     	int prongHeight = metrics.getHeight() + metrics.getDescent();
@@ -258,9 +290,27 @@ public class ScaleLineDecoration implements MapDecoration {
     		g2d.draw(frame);
     	}
 
+		int drawLeftTopX = 0;
+		int drawLeftBottomX = 0;
+
+		// Default is center when created so we do not have to do anything
+		if(currentAlignment==Alignment.RIGHT) {
+			if (topSize < bottomSize && topSize != 0) {
+				drawLeftTopX = (int)Math.round((bottomSize / 2) - (topSize / 2));
+			} else if (topSize > bottomSize && bottomSize != 0) {
+				drawLeftBottomX = (int)Math.round((topSize / 2) - (bottomSize / 2));
+			}
+		}else if(currentAlignment==Alignment.LEFT){
+			if (topSize < bottomSize && topSize != 0) {
+				drawLeftTopX = (int)Math.round((topSize / 2)-(bottomSize / 2));
+			} else if (topSize > bottomSize && bottomSize != 0) {
+				drawLeftBottomX = (int)Math.round((bottomSize / 2)-(topSize / 2));
+			}
+		}
+
     	// Draw the bars on top of the background
-		g2d.drawImage(scaleLineTop, 0, 0, null);
-		g2d.drawImage(scaleLineBottom, 0, 0, null);
+		g2d.drawImage(scaleLineTop, drawLeftTopX, 0, null);
+		g2d.drawImage(scaleLineBottom, drawLeftBottomX, 0, null);
 
 		// Restore old settings
     	g2d.setColor(oldColor);
@@ -268,7 +318,7 @@ public class ScaleLineDecoration implements MapDecoration {
     	g2d.setFont(oldFont);
     }
 
-	private int makeScaleLine(boolean top, Unit unit, double scaleDenominator, double normalizedScale, Rectangle paintArea, Object oldAntialias, Graphics2D parentGraphics, BufferedImage image, boolean onlyOne) {
+	private double makeScaleLine(boolean top, Unit unit, double scaleDenominator, double normalizedScale, Rectangle paintArea, Object oldAntialias, Graphics2D parentGraphics, BufferedImage image, boolean onlyOne) {
 
     	double baseNumber = units.get("metric").getBaseType().getInchesPerUnit();
 
@@ -277,7 +327,7 @@ public class ScaleLineDecoration implements MapDecoration {
     	int maxWidth = scaleWidthPercent;
 
     	if (maxWidth > paintArea.getWidth()) {
-    		maxWidth = (int) paintArea.getWidth();
+    		maxWidth = (int) Math.round(paintArea.getWidth());
     	}
 
     	maxWidth = maxWidth - 6;
@@ -293,11 +343,11 @@ public class ScaleLineDecoration implements MapDecoration {
     	topMax = (textLenght / baseNumber) * currentUnitType.getInchesPerUnit();//INCHES_PER_UNIT.get(curMapUnits) * INCHES_PER_UNIT.get(unitAbbrevation);
 
     	// leftX = how much more to the right than leftX
-    	int rightX = (int) (topMax / resolution);
+    	double rightX = topMax / resolution;
 
-    	int centerY = (int) paintArea.getCenterY();
+    	double centerY = paintArea.getCenterY();
 
-    	int leftX = (int) paintArea.getMinX() + ((int) paintArea.getWidth() - rightX) / 2;
+    	double leftX = paintArea.getMinX() + (paintArea.getWidth() - rightX) / 2;
 
     	FontMetrics metrics = parentGraphics.getFontMetrics(parentGraphics.getFont());
     	int prongHeight = metrics.getHeight() + metrics.getDescent();
@@ -311,16 +361,16 @@ public class ScaleLineDecoration implements MapDecoration {
     	return rightX;
 	}
 
-	private void paintScaleLine(boolean top, Graphics2D g2d, int leftX, int rightX, int prongHeight, int centerY, FontMetrics metrics, Object oldAntialias, int topRounded, UnitType currentUnitType, boolean onlyOne) {
+	private void paintScaleLine(boolean top, Graphics2D g2d, double leftX, double rightX, int prongHeight, double centerY, FontMetrics metrics, Object oldAntialias, int topRounded, UnitType currentUnitType, boolean onlyOne) {
     	int smallProngHeight = prongHeight / 4;
-    	int centerX = (leftX + leftX + rightX) / 2;
+    	double centerX = (leftX + leftX + rightX) / 2;
     	g2d.setColor(fgcolor);
     	g2d.setStroke(new BasicStroke(this.strokeWidth));
 
 
     	// Same start if top or !top
-    	int verticalStart = onlyOne ? centerY - smallProngHeight : centerY;
-    	int verticalEnd;
+    	double verticalStart = onlyOne ? centerY - smallProngHeight : centerY;
+    	double verticalEnd;
 
     	if (onlyOne) {
     		verticalEnd = centerY + smallProngHeight;
@@ -329,18 +379,18 @@ public class ScaleLineDecoration implements MapDecoration {
     	} else {
     		verticalEnd = centerY + (smallProngHeight * 2);
     	}
-    	g2d.drawLine(leftX, verticalStart, leftX, verticalEnd);
+    	drawLine(leftX, verticalStart, leftX, verticalEnd, g2d);
 
 
     	// Right vertical bar
-    	g2d.drawLine(leftX + rightX, verticalStart, leftX + rightX, verticalEnd);
+    	drawLine(leftX + rightX, verticalStart, leftX + rightX, verticalEnd, g2d);
 
     	if (scaleWidthPercent >= 200) {
-    		g2d.drawLine(centerX, verticalStart, centerX, verticalEnd);
+    		drawLine(centerX, verticalStart, centerX, verticalEnd, g2d);
     	}
 
     	// Draw horizontal line
-    	g2d.drawLine(leftX, centerY, leftX + rightX, centerY);
+    	drawLine(leftX, centerY, leftX + rightX, centerY, g2d);
 
     	//Antialias text if enabled
     	g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, oldAntialias);
@@ -348,16 +398,16 @@ public class ScaleLineDecoration implements MapDecoration {
     	if (onlyOne) {
     		// Draw text on top middle if there is only one
     		g2d.drawString(currentUnitType.getLongName(),
-    	    		centerX - (metrics.stringWidth(currentUnitType.getLongName()) / 2),
-    	    		centerY - prongHeight + metrics.getAscent() + 2
+    	    		Math.round(centerX - (metrics.stringWidth(currentUnitType.getLongName()) / 2)),
+    	    		(float)centerY - prongHeight + metrics.getAscent() + 2
     		);
     	}
 
-    	int numbersY;
+    	float numbersY;
     	if (onlyOne || !top) {
-    		numbersY = centerY + (prongHeight + metrics.getDescent() + 1);
+    		numbersY = (float)centerY + (prongHeight + metrics.getDescent() + 1);
     	} else {
-    		numbersY = centerY - (prongHeight - metrics.getDescent() - 2);
+    		numbersY = (float)centerY - (prongHeight - metrics.getDescent() - 2);
     	}
 
     	String unitAbbrevationAddedToNumbers = "";
@@ -367,23 +417,27 @@ public class ScaleLineDecoration implements MapDecoration {
 
     	String leftNumber = "0" + unitAbbrevationAddedToNumbers;
     	g2d.drawString(leftNumber,
-    	    	leftX - (metrics.stringWidth(leftNumber) / 2),
+    	    	(float)(leftX - (metrics.stringWidth(leftNumber) / 2)),
     	    	numbersY
     	);
 
     	if (scaleWidthPercent >= 200) {
-    		String middleText = new DecimalFormat("#.#").format((double) topRounded / 2) + unitAbbrevationAddedToNumbers;
+    		String middleText = new DecimalFormat("#.#").format(topRounded / 2) + unitAbbrevationAddedToNumbers;
     		g2d.drawString(middleText,
-    	    		centerX - (metrics.stringWidth(middleText) / 2),
+    	    		(float)centerX - Math.round(metrics.stringWidth(middleText) / 2),
     	    		numbersY
     		);
     	}
 
     	String rightText = String.format("%d", topRounded) + unitAbbrevationAddedToNumbers;
     	g2d.drawString(rightText,
-    	    	(rightX + leftX - (metrics.stringWidth(rightText) / 2)),
+    	    	(float)(rightX + leftX - metrics.stringWidth(rightText) / 2),
     	    	numbersY
     	);
+	}
+
+	private void drawLine(double x1, double y1, double x2, double y2, Graphics2D g2d){
+		g2d.drawLine((int)Math.round(x1), (int)Math.round(y1), (int)Math.round(x2), (int)Math.round(y2));
 	}
 
 	private class Unit {
