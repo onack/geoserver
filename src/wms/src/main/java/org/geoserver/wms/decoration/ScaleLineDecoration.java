@@ -49,7 +49,7 @@ public class ScaleLineDecoration implements MapDecoration {
 		units.put("metric", new Unit(new UnitType("METER", "m", 39.3701, 100000), new UnitType("KILOMETER", "km", 39370.1, 0)));
 		units.put("imperial", new Unit(new UnitType("FEET", "ft", 12.0, 20000), new UnitType("YARD", "yd", 36.0, 100000), new UnitType("MILE", "mi", 63360.0, 0)));
 		units.put("oldimperial", new Unit(new UnitType("FEET", "ft", 12.0, 20000), new UnitType("MILE", "mi", 63360.0, 0)));
-		units.put("neutical", new Unit(new UnitType("NEUTICAL MILE", "nmi", 72913.4, 0)));
+		units.put("nautical", new Unit(new UnitType("NAUTICAL MILE", "nmi", 72913.4, 0)));
 		units.put("decimal", new Unit(new UnitType("DECIMAL DEGREES", "dd", 4374754.0, 0)));
 
 		// Default values
